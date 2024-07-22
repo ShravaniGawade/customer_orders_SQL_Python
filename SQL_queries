@@ -1,0 +1,55 @@
+create database orders;
+use orders;
+CREATE TABLE shipment_orders (
+    order_id INT PRIMARY KEY,
+    order_date DATE,
+    ship_mode VARCHAR(25),
+    segment VARCHAR(50),
+    country VARCHAR(25),
+    city VARCHAR(25),
+    state VARCHAR(25),
+    postal_code VARCHAR(25),
+    region VARCHAR(25),
+    category VARCHAR(25),
+    sub_category VARCHAR(25),
+    product_id VARCHAR(25),
+    quantity INT,
+    discount FLOAT,
+    sale_price FLOAT,
+    profit FLOAT
+);
+
+-- Top 10 highest revenue generating products
+Select product_id, sum(sale_price) as top10 from shipment_orders 
+group by product_id order by top10 desc limit 10;
+
+-- Top 5 highest selling products in each region
+Select region, product_id, sales, product_rank from 
+(Select region, product_id, sum(sale_price) as sales,
+rank() over (partition by region order by sum(sale_price) desc) as product_rank
+from shipment_orders group by product_id, region) top5 where product_rank<=5 group by product_id, region;
+
+-- Find month-over-month growth comparison for 2022 & 2023 sales
+with cte as
+(Select year(order_date) as order_year, month(order_date) as order_month, sum(sale_price) as sales
+from shipment_orders group by order_year, order_month order by order_year, order_month)
+Select order_month, sum(case when order_year = 2022 then sales else 0 end) as year_2022,
+sum(case when order_year = 2023 then sales else 0 end) as year_2023
+from cte group by order_month order by order_month;
+
+-- For each category which month had highest sales
+Select category, year, month, sales, sales_rank from
+(Select category, monthname(order_date) as month, year(order_date) as year, sum(sale_price) as sales, 
+rank() over (partition by category order by sum(sale_price) desc) as sales_rank 
+from shipment_orders group by category, year, month)
+sub_table where sales_rank = 1;
+
+-- Which sub-category had the highest growth in profit in 2023 compared to 2022
+with cte1 as (Select sub_category, year(order_date) as year,
+sum(sale_price) as sales from shipment_orders 
+group by sub_category, year(order_date)
+order by sub_category, year(order_date)),
+cte2 as (Select sub_category, sum(case when year = 2022 then sales else 0 end) as year_2022,
+sum(case when year = 2023 then sales else 0 end) as year_2023 from cte1 group by sub_category)
+Select sub_category, year_2022, year_2023, ((year_2023 - year_2022)/year_2022)*100 as growth_percent 
+from cte2 order by growth_percent desc limit 1;
